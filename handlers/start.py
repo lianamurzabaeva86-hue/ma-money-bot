@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message
 import logging
+from utils.db import add_user
 
 router = Router()
 
@@ -25,4 +26,5 @@ async def back_to_menu(message: Message):
         await message.answer("Главное меню:", reply_markup=main_menu(message.from_user.id))
     except Exception as e:
         logging.error(f"Ошибка меню: {e}")
+
         await message.answer("Главное меню временно недоступно.")
