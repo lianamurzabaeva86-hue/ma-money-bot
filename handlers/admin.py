@@ -1,13 +1,14 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+import os
 import logging
 
 router = Router()
-OWNER_ID = 6782041245  # Убедись, что это твой ID!
+OWNER_ID = 6782041245  # 👈 Замени на свой Telegram ID, если нужно
 
-def is_owner(msg: Message): 
+def is_owner(msg: Message):
     return msg.from_user.id == OWNER_ID
 
 class AddProduct(StatesGroup):
@@ -19,7 +20,7 @@ class AddProduct(StatesGroup):
 
 @router.message(F.text == "👑 Админка")
 async def admin_panel(message: Message):
-    if not is_owner(message): 
+    if not is_owner(message):
         await message.answer("❌ Доступ запрещён")
         return
     from keyboards.kb import admin_menu
@@ -27,7 +28,7 @@ async def admin_panel(message: Message):
 
 @router.message(F.text == "➕ Добавить товар")
 async def add_product_start(message: Message, state: FSMContext):
-    if not is_owner(message): 
+    if not is_owner(message):
         await message.answer("❌ Доступ запрещён")
         return
     await state.set_state(AddProduct.name)
@@ -58,7 +59,8 @@ async def add_product_category(message: Message, state: FSMContext):
     await message.answer("Отправьте фото товара:")
 
 @router.message(AddProduct.photo, F.photo)
-async def add_product_photo(message: Message, state: FSMContext):
+async def add_product_photo(message: Message, state: FSMContext, bot: Bot):
+    # Сохраняем file_id (можно позже заменить на ImgBB или Supabase Storage)
     photo_url = message.photo[-1].file_id
     await state.update_data(photo_url=photo_url)
     await state.set_state(AddProduct.sizes)
@@ -84,7 +86,27 @@ async def add_product_sizes(message: Message, state: FSMContext):
         save_product(data)
         await message.answer("✅ Товар добавлен!")
     except Exception as e:
-        logging.error(f"Ошибка добавления: {e}")
+        logging.error(f"Ошибка добавления товара: {e}")
         await message.answer("❌ Не удалось сохранить товар.")
     
     await state.clear()
+
+@router.message(F.text == "📋 Заказы")
+async def show_orders(message: Message):
+    if not is_owner(message):
+        return
+    try:
+        from utils.db import get_all_orders
+        orders = get_all_orders()
+        if not orders:
+            await message.answer("Нет заказов.")
+            return
+        text = "📋 Заказы:\n\n"
+        for o in orders[:10]:
+            username = f"@{o['username']}" if o.get('username') else f"ID: {o['user_id']}"
+            size = o.get('size', '—')
+            text += f"🛒 {username} | Размер: {size}\n"
+        await message.answer(text)
+    except Exception as e:
+        logging.error(f"Ошибка загрузки заказов: {e}")
+        await message.answer("❌ Ошибка при получении заказов.")
