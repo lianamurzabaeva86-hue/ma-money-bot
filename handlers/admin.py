@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 import logging
 
 router = Router()
-OWNER_ID = 6782041245  # 👈 Убедись, что это твой Telegram ID
+OWNER_ID = 6782041245
 
 def is_owner(msg: Message):
     return msg.from_user.id == OWNER_ID
@@ -17,9 +17,15 @@ class AddProduct(StatesGroup):
     photo = State()
     sizes = State()
 
+class DeleteProduct(StatesGroup):
+    id = State()
+
+class Broadcast(StatesGroup):
+    text = State()
+
 @router.message(F.text == "👑 Админка")
 async def admin_panel(message: Message, state: FSMContext):
-    await state.clear()  # ← КРИТИЧЕСКИ ВАЖНО: сброс состояния при входе
+    await state.clear()
     if not is_owner(message):
         await message.answer("❌ Доступ запрещён")
         return
@@ -95,9 +101,75 @@ async def add_product_sizes(message: Message, state: FSMContext):
     
     await state.clear()
 
+@router.message(F.text == "🗑 Удалить товар")
+async def delete_product_start(message: Message, state: FSMContext):
+    if not is_owner(message):
+        return
+    await state.set_state(DeleteProduct.id)
+    await message.answer("Введите ID товара для удаления:")
+
+@router.message(DeleteProduct.id)
+async def delete_product_confirm(message: Message, state: FSMContext):
+    try:
+        pid = int(message.text)
+        from utils.db import delete_product, get_product_by_id
+        if not get_product_by_id(pid):
+            await message.answer("❌ Товар не найден.")
+            return
+        delete_product(pid)
+        await message.answer("✅ Товар удалён!")
+    except ValueError:
+        await message.answer("❌ Неверный ID. Введите число.")
+    await state.clear()
+
+@router.message(F.text == "👥 Пользователи")
+async def show_users(message: Message, state: FSMContext):
+    await state.clear()
+    if not is_owner(message):
+        return
+    try:
+        from utils.db import get_all_users
+        users = get_all_users()
+        if not users:
+            await message.answer("Нет пользователей.")
+            return
+        text = "👥 Пользователи:\n\n"
+        for u in users[:20]:
+            text += f"ID: {u['tg_id']} | @{u['username'] or '—'}\n"
+        await message.answer(text)
+    except Exception as e:
+        logging.error(f"Пользователи: {e}")
+        await message.answer("❌ Ошибка загрузки пользователей.")
+
+@router.message(F.text == "📢 Рассылка")
+async def broadcast_start(message: Message, state: FSMContext):
+    if not is_owner(message):
+        return
+    await state.set_state(Broadcast.text)
+    await message.answer("Введите текст рассылки:")
+
+@router.message(Broadcast.text)
+async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
+    text = message.text
+    try:
+        from utils.db import get_all_users
+        users = get_all_users()
+        success = 0
+        for u in users:
+            try:
+                await bot.send_message(u["tg_id"], text)
+                success += 1
+            except:
+                pass
+        await message.answer(f"✅ Рассылка отправлена {success} пользователям.")
+    except Exception as e:
+        logging.error(f"Рассылка: {e}")
+        await message.answer("❌ Ошибка рассылки.")
+    await state.clear()
+
 @router.message(F.text == "📋 Заказы")
 async def show_orders(message: Message, state: FSMContext):
-    await state.clear()  # ← Дополнительная защита
+    await state.clear()
     if not is_owner(message):
         return
     try:
