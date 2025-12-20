@@ -20,6 +20,9 @@ class AddProduct(StatesGroup):
 class DeleteProduct(StatesGroup):
     id = State()
 
+class DeleteOrder(StatesGroup):
+    id = State()
+
 class Broadcast(StatesGroup):
     text = State()
 
@@ -122,6 +125,50 @@ async def delete_product_confirm(message: Message, state: FSMContext):
         await message.answer("❌ Неверный ID. Введите число.")
     await state.clear()
 
+@router.message(F.text == "📋 Заказы")
+async def show_orders(message: Message, state: FSMContext):
+    await state.clear()
+    if not is_owner(message):
+        return
+    try:
+        from utils.db import get_all_orders
+        orders = get_all_orders()
+        if not orders:
+            await message.answer("Нет заказов.")
+            return
+        text = "📋 Последние заказы:\n\n"
+        for o in orders[:20]:
+            order_id = o.get('id', '—')
+            username = f"@{o['username']}" if o.get('username') else f"ID: {o['user_id']}"
+            size = o.get('size', '—')
+            text += f"📦 ID: {order_id} | {username} | Размер: {size}\n"
+        text += "\nЧтобы удалить заказ, нажмите «🗑 Удалить заказ» и введите ID."
+        await message.answer(text)
+    except Exception as e:
+        logging.error(f"Ошибка загрузки заказов: {e}")
+        await message.answer("❌ Ошибка при получении заказов.")
+
+@router.message(F.text == "🗑 Удалить заказ")
+async def delete_order_start(message: Message, state: FSMContext):
+    if not is_owner(message):
+        return
+    await state.set_state(DeleteOrder.id)
+    await message.answer("Введите ID заказа для удаления:")
+
+@router.message(DeleteOrder.id)
+async def delete_order_confirm(message: Message, state: FSMContext):
+    try:
+        order_id = int(message.text)
+        from utils.db import delete_order, get_order_by_id
+        if not get_order_by_id(order_id):
+            await message.answer("❌ Заказ не найден.")
+            return
+        delete_order(order_id)
+        await message.answer("✅ Заказ удалён!")
+    except ValueError:
+        await message.answer("❌ Неверный ID. Введите число.")
+    await state.clear()
+
 @router.message(F.text == "👥 Пользователи")
 async def show_users(message: Message, state: FSMContext):
     await state.clear()
@@ -166,24 +213,3 @@ async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
         logging.error(f"Рассылка: {e}")
         await message.answer("❌ Ошибка рассылки.")
     await state.clear()
-
-@router.message(F.text == "📋 Заказы")
-async def show_orders(message: Message, state: FSMContext):
-    await state.clear()
-    if not is_owner(message):
-        return
-    try:
-        from utils.db import get_all_orders
-        orders = get_all_orders()
-        if not orders:
-            await message.answer("Нет заказов.")
-            return
-        text = "📋 Последние заказы:\n\n"
-        for o in orders[:10]:
-            username = f"@{o['username']}" if o.get('username') else f"ID: {o['user_id']}"
-            size = o.get('size', '—')
-            text += f"🛒 {username} | Размер: {size}\n"
-        await message.answer(text)
-    except Exception as e:
-        logging.error(f"Ошибка загрузки заказов: {e}")
-        await message.answer("❌ Ошибка при получении заказов.")
