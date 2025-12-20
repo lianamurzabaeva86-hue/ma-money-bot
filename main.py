@@ -17,7 +17,6 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 async def ensure_webhook():
-    """Проверяет и восстанавливает webhook каждые 5 минут"""
     while True:
         try:
             info = await bot.get_webhook_info()
@@ -27,12 +26,10 @@ async def ensure_webhook():
                 print(f"🔁 Webhook восстановлен: {expected_url}")
         except Exception as e:
             print(f"⚠️ Ошибка проверки webhook: {e}")
-        await asyncio.sleep(300)  # 5 минут
+        await asyncio.sleep(300)
 
 async def on_startup(app):
-    # Запускаем фоновую задачу
     app["webhook_task"] = asyncio.create_task(ensure_webhook())
-    # Устанавливаем webhook один раз при старте
     try:
         await bot.set_webhook(f"{BASE_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
         print("✅ Webhook установлен")
