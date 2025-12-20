@@ -4,6 +4,9 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from handlers import start, catalog, admin
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -11,7 +14,7 @@ if not BOT_TOKEN:
 
 WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
 WEBHOOK_SECRET = "my-secret"
-BASE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://clothing-bot.onrender.com").rstrip("/")
+BASE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://ma-money-bot.onrender.com").rstrip("/")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -19,22 +22,14 @@ dp = Dispatcher()
 async def ensure_webhook():
     while True:
         try:
-            info = await bot.get_webhook_info()
-            expected_url = f"{BASE_URL}{WEBHOOK_PATH}"
-            if info.url != expected_url:
-                await bot.set_webhook(expected_url, secret_token=WEBHOOK_SECRET)
-                print(f"🔁 Webhook восстановлен: {expected_url}")
+            await bot.set_webhook(f"{BASE_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
+            logging.info("✅ Webhook активен")
         except Exception as e:
-            print(f"⚠️ Ошибка проверки webhook: {e}")
-        await asyncio.sleep(300)
+            logging.error(f"🔁 Ошибка webhook: {e}")
+        await asyncio.sleep(60)
 
 async def on_startup(app):
     app["webhook_task"] = asyncio.create_task(ensure_webhook())
-    try:
-        await bot.set_webhook(f"{BASE_URL}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
-        print("✅ Webhook установлен")
-    except Exception as e:
-        print(f"❌ Ошибка при старте: {e}")
 
 async def on_shutdown(app):
     task = app.get("webhook_task")
@@ -45,6 +40,10 @@ async def on_shutdown(app):
 def main():
     dp.include_routers(start.router, catalog.router, admin.router)
     app = web.Application()
+    
+    # 🔑 Health-check endpoint — чтобы Render НЕ засыпал
+    app.router.add_get('/healthz', lambda r: web.Response(text='OK'))
+    
     SimpleRequestHandler(dispatcher=dp, bot=bot, secret_token=WEBHOOK_SECRET).register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
     app.on_startup.append(on_startup)
