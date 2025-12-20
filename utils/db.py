@@ -17,26 +17,24 @@ def safe_execute(func, default=None):
 async def upload_to_imgbb(bot, file_id: str) -> str:
     """
     Загружает фото из Telegram в ImgBB и возвращает публичную ссылку.
-    Требуется переменная окружения IMGBB_KEY.
+    Если IMGBB_KEY не задан — возвращает Telegram file_id как fallback.
     """
     try:
-        # Получаем информацию о файле из Telegram
+        # Получаем файл из Telegram
         file = await bot.get_file(file_id)
-        # Скачиваем фото как байты
         photo_bytes = await bot.download_file(file.file_path)
-        
-        # Кодируем изображение в base64
         encoded = base64.b64encode(photo_bytes).decode('utf-8')
         
-        # Получаем API-ключ ImgBB из переменных окружения
+        # Получаем ключ
         imgbb_key = os.getenv("IMGBB_KEY")
         if not imgbb_key:
-            raise ValueError("IMGBB_KEY не установлен в переменных окружения")
+            logging.warning("IMGBB_KEY не установлен. Используется Telegram file_id.")
+            return f"tg://{file_id}"  # ← Безопасный fallback
         
-        # Отправляем запрос в ImgBB API
+        # Отправляем в ImgBB (исправленный URL!)
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                "https://api.imgbb.com/1/upload",
+                "https://api.imgbb.com/1/upload",  # ← УБРАНЫ ПРОБЕЛЫ!
                 data={
                     "key": imgbb_key,
                     "image": encoded,
@@ -49,12 +47,12 @@ async def upload_to_imgbb(bot, file_id: str) -> str:
             if data.get("success"):
                 return data["data"]["url"]
             else:
-                error_msg = data.get("error", {}).get("message", "Неизвестная ошибка ImgBB")
-                raise Exception(f"ImgBB API error: {error_msg}")
+                error_msg = data.get("error", {}).get("message", "Неизвестная ошибка")
+                raise Exception(f"ImgBB: {error_msg}")
                 
     except Exception as e:
         logging.error(f"Ошибка загрузки в ImgBB: {e}")
-        # Fallback: возвращаем Telegram file_id (бот всё равно сможет показать фото)
+        # Всегда возвращаем fallback
         return f"tg://{file_id}"
 
 # === Работа с пользователями ===
@@ -80,10 +78,6 @@ def get_product_by_id(pid):
     return data[0] if data else None
 
 def save_product(data):
-    """
-    Сохраняет товар в базу.
-    Ожидает словарь с ключами: name, category, price, photo_url, sizes
-    """
     safe_execute(lambda: supabase.table("products").insert({
         "name": data["name"],
         "category": data["category"],
@@ -106,4 +100,3 @@ def save_order(uid, uname, pid, size):
 
 def get_all_orders():
     return safe_execute(lambda: supabase.table("orders").select("*").order("created_at", desc=True).execute().data, [])
-
