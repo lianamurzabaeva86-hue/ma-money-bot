@@ -2,13 +2,18 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 OWNER_ID = 6782041245
 
-def main_menu(user_id):
+def main_menu(user_id=None):
     kb = [[KeyboardButton(text="📦 Каталог")]]
     if user_id == OWNER_ID:
         kb.append([KeyboardButton(text="👑 Админка")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 def categories_kb(categories):
+    if not categories:
+        return ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True
+        )
     kb = []
     for i in range(0, len(categories), 2):
         row = [KeyboardButton(text=f"👗 {categories[i]}")]
@@ -28,10 +33,7 @@ def admin_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="➕ Добавить товар")],
-            [KeyboardButton(text="🗑 Удалить товар")],
             [KeyboardButton(text="📋 Заказы")],
-            [KeyboardButton(text="👥 Пользователи")],
-            [KeyboardButton(text="📢 Рассылка")],
             [KeyboardButton(text="⬅️ В меню")]
         ],
         resize_keyboard=True
