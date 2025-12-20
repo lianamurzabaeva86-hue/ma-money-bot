@@ -33,7 +33,10 @@ def admin_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="➕ Добавить товар")],
+            [KeyboardButton(text="🗑 Удалить товар")],
             [KeyboardButton(text="📋 Заказы")],
+            [KeyboardButton(text="👥 Пользователи")],
+            [KeyboardButton(text="📢 Рассылка")],
             [KeyboardButton(text="⬅️ В меню")]
         ],
         resize_keyboard=True
