@@ -20,20 +20,20 @@ async def upload_to_imgbb(bot, file_id: str) -> str:
     Требуется переменная окружения IMGBB_KEY.
     """
     try:
-        # Получаем информацию о файле
+        # Получаем информацию о файле из Telegram
         file = await bot.get_file(file_id)
         # Скачиваем фото как байты
         photo_bytes = await bot.download_file(file.file_path)
         
-        # Кодируем в base64
+        # Кодируем изображение в base64
         encoded = base64.b64encode(photo_bytes).decode('utf-8')
         
-        # Получаем ключ ImgBB
+        # Получаем API-ключ ImgBB из переменных окружения
         imgbb_key = os.getenv("IMGBB_KEY")
         if not imgbb_key:
             raise ValueError("IMGBB_KEY не установлен в переменных окружения")
         
-        # Загружаем в ImgBB
+        # Отправляем запрос в ImgBB API
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 "https://api.imgbb.com/1/upload",
@@ -45,17 +45,19 @@ async def upload_to_imgbb(bot, file_id: str) -> str:
             )
             response.raise_for_status()
             data = response.json()
+            
             if data.get("success"):
                 return data["data"]["url"]
             else:
                 error_msg = data.get("error", {}).get("message", "Неизвестная ошибка ImgBB")
                 raise Exception(f"ImgBB API error: {error_msg}")
+                
     except Exception as e:
         logging.error(f"Ошибка загрузки в ImgBB: {e}")
-        # Fallback: сохраняем как Telegram file_id
+        # Fallback: возвращаем Telegram file_id (бот всё равно сможет показать фото)
         return f"tg://{file_id}"
 
-# === Пользователи ===
+# === Работа с пользователями ===
 def add_user(tg_id, username):
     safe_execute(lambda: supabase.table("users").upsert({
         "tg_id": tg_id,
@@ -65,7 +67,7 @@ def add_user(tg_id, username):
 def get_all_users():
     return safe_execute(lambda: supabase.table("users").select("tg_id,username").execute().data, [])
 
-# === Товары ===
+# === Работа с товарами ===
 def get_categories():
     data = safe_execute(lambda: supabase.table("products").select("category").execute().data, [])
     return sorted(set(item["category"] for item in data)) if data else []
@@ -78,7 +80,10 @@ def get_product_by_id(pid):
     return data[0] if data else None
 
 def save_product(data):
-    """Сохраняет товар с полями: name, category, price, photo_url, sizes"""
+    """
+    Сохраняет товар в базу.
+    Ожидает словарь с ключами: name, category, price, photo_url, sizes
+    """
     safe_execute(lambda: supabase.table("products").insert({
         "name": data["name"],
         "category": data["category"],
@@ -90,7 +95,7 @@ def save_product(data):
 def delete_product(pid):
     safe_execute(lambda: supabase.table("products").delete().eq("id", pid).execute())
 
-# === Заказы ===
+# === Работа с заказами ===
 def save_order(uid, uname, pid, size):
     safe_execute(lambda: supabase.table("orders").insert({
         "user_id": uid,
@@ -101,3 +106,4 @@ def save_order(uid, uname, pid, size):
 
 def get_all_orders():
     return safe_execute(lambda: supabase.table("orders").select("*").order("created_at", desc=True).execute().data, [])
+
