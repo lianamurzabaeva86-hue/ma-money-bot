@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramAPIError
 import logging
 
@@ -7,7 +8,8 @@ router = Router()
 OWNER_ID = 6782041245
 
 @router.message(F.text == "📦 Каталог")
-async def show_categories(message: Message):
+async def show_categories(message: Message, state: FSMContext):
+    await state.clear()  # ← КРИТИЧЕСКИ ВАЖНО
     try:
         from utils.db import get_categories
         categories = get_categories()
@@ -21,7 +23,8 @@ async def show_categories(message: Message):
         await message.answer("❌ Не удалось загрузить категории.")
 
 @router.message(F.text.startswith("👗 "))
-async def show_products_by_category(message: Message):
+async def show_products_by_category(message: Message, state: FSMContext):
+    await state.clear()  # ← Защита от зависших состояний
     try:
         category = message.text[2:]
         from utils.db import get_products_by_category
@@ -47,11 +50,13 @@ async def show_products_by_category(message: Message):
         await message.answer("❌ Ошибка загрузки товаров.")
 
 @router.message(F.text == "🛒 Заказать")
-async def order_help(message: Message):
+async def order_help(message: Message, state: FSMContext):
+    await state.clear()
     await message.answer("Напишите ID товара и размер (например: `5 36`).")
 
 @router.message(F.text.regexp(r'^\d+\s+.+$'))
-async def handle_order_text(message: Message):
+async def handle_order_text(message: Message, state: FSMContext):
+    await state.clear()  # ← На случай, если пользователь был в FSM
     try:
         if not message.from_user.username:
             await message.answer("❌ У вас нет @username. Задайте его в настройках Telegram.")
@@ -79,5 +84,6 @@ async def handle_order_text(message: Message):
         await message.answer("❌ Ошибка оформления заказа.")
 
 @router.message(F.text.in_(["⬅️ Назад", "⬅️ Назад к категориям"]))
-async def back_to_categories(message: Message):
+async def back_to_categories(message: Message, state: FSMContext):
+    await state.clear()
     await show_categories(message)
