@@ -2,11 +2,10 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-import os
 import logging
 
 router = Router()
-OWNER_ID = 6782041245  # 👈 Замени на свой Telegram ID, если нужно
+OWNER_ID = 6782041245  # 👈 Замени на свой Telegram ID
 
 def is_owner(msg: Message):
     return msg.from_user.id == OWNER_ID
@@ -60,15 +59,19 @@ async def add_product_category(message: Message, state: FSMContext):
 
 @router.message(AddProduct.photo, F.photo)
 async def add_product_photo(message: Message, state: FSMContext, bot: Bot):
-    # Сохраняем file_id (можно позже заменить на ImgBB или Supabase Storage)
-    photo_url = message.photo[-1].file_id
-    await state.update_data(photo_url=photo_url)
-    await state.set_state(AddProduct.sizes)
-    await message.answer("Введите размеры через запятую (например: 36, 38, 40) или '-' если нет:")
+    try:
+        from utils.db import upload_to_imgbb
+        photo_url = await upload_to_imgbb(bot, message.photo[-1].file_id)
+        await state.update_data(photo_url=photo_url)
+        await state.set_state(AddProduct.sizes)
+        await message.answer("Введите размеры через запятую (например: 36, 38, 40) или '-' если нет:")
+    except Exception as e:
+        logging.error(f"Ошибка загрузки фото: {e}")
+        await message.answer("❌ Не удалось загрузить фото. Повторите попытку.")
 
 @router.message(AddProduct.photo)
 async def photo_invalid(message: Message):
-    await message.answer("❌ Отправьте фото!")
+    await message.answer("❌ Отправьте именно фото (не файл, не текст)!")
 
 @router.message(AddProduct.sizes)
 async def add_product_sizes(message: Message, state: FSMContext):
@@ -84,10 +87,10 @@ async def add_product_sizes(message: Message, state: FSMContext):
     try:
         from utils.db import save_product
         save_product(data)
-        await message.answer("✅ Товар добавлен!")
+        await message.answer("✅ Товар успешно добавлен!")
     except Exception as e:
-        logging.error(f"Ошибка добавления товара: {e}")
-        await message.answer("❌ Не удалось сохранить товар.")
+        logging.error(f"Ошибка сохранения товара: {e}")
+        await message.answer("❌ Не удалось сохранить товар в базу.")
     
     await state.clear()
 
@@ -101,7 +104,7 @@ async def show_orders(message: Message):
         if not orders:
             await message.answer("Нет заказов.")
             return
-        text = "📋 Заказы:\n\n"
+        text = "📋 Последние заказы:\n\n"
         for o in orders[:10]:
             username = f"@{o['username']}" if o.get('username') else f"ID: {o['user_id']}"
             size = o.get('size', '—')
@@ -110,3 +113,4 @@ async def show_orders(message: Message):
     except Exception as e:
         logging.error(f"Ошибка загрузки заказов: {e}")
         await message.answer("❌ Ошибка при получении заказов.")
+
