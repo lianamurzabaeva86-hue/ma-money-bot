@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 import logging
 
 router = Router()
-OWNER_ID = 6782041245  # 👈 Замени на свой Telegram ID
+OWNER_ID = 6782041245  # 👈 Убедись, что это твой Telegram ID
 
 def is_owner(msg: Message):
     return msg.from_user.id == OWNER_ID
@@ -18,7 +18,8 @@ class AddProduct(StatesGroup):
     sizes = State()
 
 @router.message(F.text == "👑 Админка")
-async def admin_panel(message: Message):
+async def admin_panel(message: Message, state: FSMContext):
+    await state.clear()  # ← КРИТИЧЕСКИ ВАЖНО: сброс состояния при входе
     if not is_owner(message):
         await message.answer("❌ Доступ запрещён")
         return
@@ -71,7 +72,7 @@ async def add_product_photo(message: Message, state: FSMContext, bot: Bot):
 
 @router.message(AddProduct.photo)
 async def photo_invalid(message: Message):
-    await message.answer("❌ Отправьте именно фото (не файл, не текст)!")
+    await message.answer("❌ Отправьте именно фото!")
 
 @router.message(AddProduct.sizes)
 async def add_product_sizes(message: Message, state: FSMContext):
@@ -95,7 +96,8 @@ async def add_product_sizes(message: Message, state: FSMContext):
     await state.clear()
 
 @router.message(F.text == "📋 Заказы")
-async def show_orders(message: Message):
+async def show_orders(message: Message, state: FSMContext):
+    await state.clear()  # ← Дополнительная защита
     if not is_owner(message):
         return
     try:
@@ -113,4 +115,3 @@ async def show_orders(message: Message):
     except Exception as e:
         logging.error(f"Ошибка загрузки заказов: {e}")
         await message.answer("❌ Ошибка при получении заказов.")
-
