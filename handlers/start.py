@@ -1,14 +1,15 @@
 from aiogram import Router, F
 from aiogram.types import Message
+from aiogram.fsm.context import FSMContext  # ← ДОБАВЛЕНО
 import logging
 from utils.db import add_user
 
 router = Router()
 
 @router.message(F.text == "/start")
-async def start(message: Message):
+async def start(message: Message, state: FSMContext):  # ← ДОБАВЛЕН state
+    await state.clear()  # ← КРИТИЧЕСКИ ВАЖНО: сброс состояния
     try:
-        from utils.db import add_user
         add_user(message.from_user.id, message.from_user.username)
         from keyboards.kb import main_menu
         await message.answer(
@@ -20,11 +21,11 @@ async def start(message: Message):
         await message.answer("Добро пожаловать! Меню временно недоступно.")
 
 @router.message(F.text.in_(["⬅️ Назад", "⬅️ В меню"]))
-async def back_to_menu(message: Message):
+async def back_to_menu(message: Message, state: FSMContext):  # ← ДОБАВЛЕН state
+    await state.clear()  # ← Сброс состояния
     try:
         from keyboards.kb import main_menu
         await message.answer("Главное меню:", reply_markup=main_menu(message.from_user.id))
     except Exception as e:
         logging.error(f"Ошибка меню: {e}")
-
         await message.answer("Главное меню временно недоступно.")
