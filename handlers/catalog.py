@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message
-from aiogram.fsm.context import FSMContext  # ← Обязательно
+from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramAPIError
 import logging
 
@@ -84,5 +84,5 @@ async def handle_order_text(message: Message, state: FSMContext):
         await message.answer("❌ Ошибка оформления заказа.")
 
 @router.message(F.text.in_(["⬅️ Назад", "⬅️ Назад к категориям"]))
-async def back_to_categories(message: Message, state: FSMContext):  # ← ДОБАВЛЕН state
-    await show_categories(message, state)  # ← ПЕРЕДАЁМ state
+async def back_to_categories(message: Message, state: FSMContext):
+    await show_categories(message, state)
