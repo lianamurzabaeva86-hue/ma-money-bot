@@ -92,3 +92,10 @@ def save_order(uid, uname, pid, size):
 
 def get_all_orders():
     return safe_execute(lambda: supabase.table("orders").select("*").order("created_at", desc=True).execute().data, [])
+
+def get_order_by_id(oid):
+    data = safe_execute(lambda: supabase.table("orders").select("*").eq("id", oid).execute().data, [])
+    return data[0] if data else None
+
+def delete_order(oid):
+    safe_execute(lambda: supabase.table("orders").delete().eq("id", oid).execute())
