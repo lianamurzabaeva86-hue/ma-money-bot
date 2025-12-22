@@ -26,7 +26,7 @@ async def show_categories(message: Message, state: FSMContext):
 async def show_products_by_category(message: Message, state: FSMContext):
     await state.clear()
     try:
-        category = message.text[2:]
+        category = message.text[2:]  # Убираем "👗 "
         from utils.db import get_products_by_category
         products = get_products_by_category(category)
         if not products:
@@ -36,13 +36,27 @@ async def show_products_by_category(message: Message, state: FSMContext):
         for p in products:
             caption = f"ID: {p['id']}\n{p['name']}\n💰 {p['price']} ₽"
             if p.get("sizes"):
-                caption += f"\n📏 Размеры: {', '.join(p['sizes'])}"
-            try:
-                await message.answer_photo(photo=p["photo_url"], caption=caption)
-            except TelegramAPIError:
-                await message.answer(f"{caption}\n📷 [Фото недоступно]")
+                caption += f"\n📏 Размеры: {p['sizes']}"
+            
+            # Отправляем фото по file_id (Telegram хранит его сам)
+            photo_file_id = p.get("photo_file_id")
+            if photo_file_id and photo_file_id.startswith("tg://"):
+                # Совместимость: если сохраняли как "tg://file_id", извлекаем ID
+                photo_id = photo_file_id.replace("tg://", "")
+            else:
+                photo_id = photo_file_id
+
+            if photo_id:
+                try:
+                    await message.answer_photo(photo=photo_id, caption=caption)
+                except TelegramAPIError:
+                    await message.answer(f"{caption}\n📷 [Фото недоступно]")
+            else:
+                await message.answer(caption)
+        
         await message.answer(
-            "Чтобы заказать, напишите: **ID и размер** (например: `5 36`).",
+            "👉 Напишите **ID товара и размер** (например: `5 36`), "
+            "и владелец магазина свяжется с вами напрямую!",
             reply_markup=product_kb()
         )
     except Exception as e:
@@ -52,36 +66,30 @@ async def show_products_by_category(message: Message, state: FSMContext):
 @router.message(F.text == "🛒 Заказать")
 async def order_help(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Напишите ID товара и размер (например: `5 36`).")
+    await message.answer(
+        "Напишите **ID товара и размер** (например: `5 36`). "
+        "Владелец увидит ваше сообщение и свяжется с вами в Telegram."
+    )
 
-@router.message(F.text.regexp(r'^\d+\s+.+$'))
-async def handle_order_text(message: Message, state: FSMContext):
+# Обрабатываем ЛЮБОЕ текстовое сообщение как запрос на заказ
+@router.message(F.text)
+async def forward_any_order_message(message: Message, state: FSMContext):
     await state.clear()
+    
+    # Пересылаем сообщение владельцу — НИЧЕГО НЕ СОХРАНЯЕМ
     try:
-        if not message.from_user.username:
-            await message.answer("❌ У вас нет @username. Задайте его в настройках Telegram.")
-            return
-        parts = message.text.split(maxsplit=1)
-        product_id = int(parts[0])
-        size = parts[1].strip()
-        from utils.db import get_product_by_id, save_order
-        product = get_product_by_id(product_id)
-        if not product:
-            await message.answer("❌ Товар не найден.")
-            return
-        sizes = product.get("sizes", [])
-        if sizes and size not in sizes:
-            await message.answer(f"❌ Нет размера {size}. Доступно: {', '.join(sizes)}")
-            return
-        save_order(message.from_user.id, message.from_user.username, product_id, size)
-        await message.bot.send_message(
-            OWNER_ID,
-            f"🆕 ЗАКАЗ!\nТовар: {product['name']}\nID: {product_id}\nРазмер: {size}\n@{message.from_user.username}"
+        await message.bot.forward_message(
+            chat_id=OWNER_ID,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id
         )
-        await message.answer("✅ Заказ отправлен! Владелец свяжется с вами.")
+        await message.answer(
+            "✅ Ваше сообщение отправлено владельцу магазина!\n"
+            "Ожидайте ответа в Telegram."
+        )
     except Exception as e:
-        logging.error(f"Заказ: {e}")
-        await message.answer("❌ Ошибка оформления заказа.")
+        logging.error(f"Пересылка заказа: {e}")
+        await message.answer("❌ Не удалось отправить. Попробуйте позже.")
 
 @router.message(F.text.in_(["⬅️ Назад", "⬅️ Назад к категориям"]))
 async def back_to_categories(message: Message, state: FSMContext):
