@@ -5,7 +5,7 @@ from aiogram.exceptions import TelegramAPIError
 import logging
 
 router = Router()
-OWNER_ID = 6782041245
+OWNER_ID = 6782041245  # Твой Telegram ID
 
 @router.message(F.text == "📦 Каталог")
 async def show_categories(message: Message, state: FSMContext):
@@ -19,7 +19,7 @@ async def show_categories(message: Message, state: FSMContext):
         from keyboards.kb import categories_kb
         await message.answer("Выберите категорию:", reply_markup=categories_kb(categories))
     except Exception as e:
-        logging.error(f"Каталог: {e}")
+        logging.error(f"Ошибка загрузки категорий: {e}")
         await message.answer("❌ Не удалось загрузить категории.")
 
 @router.message(F.text.startswith("👗 "))
@@ -38,14 +38,7 @@ async def show_products_by_category(message: Message, state: FSMContext):
             if p.get("sizes"):
                 caption += f"\n📏 Размеры: {p['sizes']}"
             
-            # Отправляем фото по file_id (Telegram хранит его сам)
-            photo_file_id = p.get("photo_file_id")
-            if photo_file_id and photo_file_id.startswith("tg://"):
-                # Совместимость: если сохраняли как "tg://file_id", извлекаем ID
-                photo_id = photo_file_id.replace("tg://", "")
-            else:
-                photo_id = photo_file_id
-
+            photo_id = p.get("photo_file_id")
             if photo_id:
                 try:
                     await message.answer_photo(photo=photo_id, caption=caption)
@@ -55,40 +48,39 @@ async def show_products_by_category(message: Message, state: FSMContext):
                 await message.answer(caption)
         
         await message.answer(
-            "👉 Напишите **ID товара и размер** (например: `5 36`), "
-            "и владелец магазина свяжется с вами напрямую!",
+            "👉 Напишите **ID товара и размер** (например: `5 L`), "
+            "и владелец магазина свяжется с вами напрямую в Telegram.",
             reply_markup=product_kb()
         )
     except Exception as e:
-        logging.error(f"Товары: {e}")
-        await message.answer("❌ Ошибка загрузки товаров.")
+        logging.error(f"Ошибка загрузки товаров: {e}")
+        await message.answer("❌ Ошибка при показе товаров.")
 
 @router.message(F.text == "🛒 Заказать")
 async def order_help(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "Напишите **ID товара и размер** (например: `5 36`). "
-        "Владелец увидит ваше сообщение и свяжется с вами в Telegram."
+        "Напишите **ID товара и размер** (например: `5 L`). "
+        "Владелец увидит ваше сообщение и напишет вам в личные сообщения Telegram."
     )
 
-# Обрабатываем ЛЮБОЕ текстовое сообщение как запрос на заказ
+# 🔑 ОСНОВНАЯ ФУНКЦИЯ: любое сообщение → пересылка владельцу
 @router.message(F.text)
-async def forward_any_order_message(message: Message, state: FSMContext):
+async def forward_to_owner(message: Message, state: FSMContext):
     await state.clear()
-    
-    # Пересылаем сообщение владельцу — НИЧЕГО НЕ СОХРАНЯЕМ
     try:
+        # Пересылаем полное сообщение — владелец видит профиль клиента
         await message.bot.forward_message(
             chat_id=OWNER_ID,
             from_chat_id=message.chat.id,
             message_id=message.message_id
         )
         await message.answer(
-            "✅ Ваше сообщение отправлено владельцу магазина!\n"
-            "Ожидайте ответа в Telegram."
+            "✅ Отправлено! Владелец магазина получил ваше сообщение "
+            "и свяжется с вами в личных сообщениях Telegram."
         )
     except Exception as e:
-        logging.error(f"Пересылка заказа: {e}")
+        logging.error(f"Ошибка пересылки: {e}")
         await message.answer("❌ Не удалось отправить. Попробуйте позже.")
 
 @router.message(F.text.in_(["⬅️ Назад", "⬅️ Назад к категориям"]))
