@@ -1,10 +1,11 @@
 import os
-import io
-import base64
 import logging
 from supabase import create_client
-import httpx
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+
+# Подключение к Supabase
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def safe_execute(func, default=None):
@@ -14,88 +15,150 @@ def safe_execute(func, default=None):
         logging.error(f"Supabase error: {e}")
         return default
 
-async def upload_to_imgbb(bot, file_id: str) -> str:
-    try:
-        file = await bot.get_file(file_id)
-        photo_io = await bot.download_file(file.file_path)
-        photo_bytes = photo_io.read()
-        encoded = base64.b64encode(photo_bytes).decode('utf-8')
-        
-        imgbb_key = os.getenv("IMGBB_KEY")
-        if not imgbb_key:
-            logging.warning("IMGBB_KEY не установлен. Используется Telegram file_id.")
-            return f"tg://{file_id}"
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "https://api.imgbb.com/1/upload",
-                data={
-                    "key": imgbb_key,
-                    "image": encoded,
-                    "name": f"product_{file_id}"
-                }
-            )
-            response.raise_for_status()
-            data = response.json()
-            if data.get("success"):
-                return data["data"]["url"]
-            else:
-                error_msg = data.get("error", {}).get("message", "Неизвестная ошибка ImgBB")
-                raise Exception(f"ImgBB API error: {error_msg}")
-                
-    except Exception as e:
-        logging.error(f"Ошибка загрузки в ImgBB: {e}")
-        return f"tg://{file_id}"
+# ========================
+# ПОЛЬЗОВАТЕЛИ (только для рассылки админом — НЕ для хранения ПДн)
+# ВНИМАНИЕ: если не используешь рассылку — можешь удалить эти функции
+# ========================
 
-# Пользователи
-def add_user(tg_id, username):
-    safe_execute(lambda: supabase.table("users").upsert({
+def add_user_for_broadcast(tg_id: int, username: str = None):
+    """
+    Добавляет пользователя ТОЛЬКО для ручной рассылки админом.
+    НЕ используется для идентификации, подписок или заказов.
+    """
+    safe_execute(lambda: supabase.table("broadcast_users").upsert({
         "tg_id": tg_id,
         "username": username
     }).execute())
 
-def get_all_users():
-    return safe_execute(lambda: supabase.table("users").select("tg_id,username").execute().data, [])
+def get_all_broadcast_users():
+    """Получает список для рассылки (только если админ использует команду /send)"""
+    return safe_execute(
+        lambda: supabase.table("broadcast_users")
+        .select("tg_id, username")
+        .execute()
+        .data,
+        []
+    )
 
-# Товары
+# ========================
+# ТОВАРЫ — ОСНОВНАЯ ЧАСТЬ
+# ========================
+
 def get_categories():
-    data = safe_execute(lambda: supabase.table("products").select("category").execute().data, [])
+    """Получить уникальные категории товаров"""
+    data = safe_execute(
+        lambda: supabase.table("products")
+        .select("category")
+        .execute()
+        .data,
+        []
+    )
     return sorted(set(item["category"] for item in data)) if data else []
 
-def get_products_by_category(cat):
-    return safe_execute(lambda: supabase.table("products").select("*").eq("category", cat).execute().data, [])
+def get_products_by_category(category: str):
+    """Получить все товары в категории"""
+    return safe_execute(
+        lambda: supabase.table("products")
+        .select("*")
+        .eq("category", category)
+        .execute()
+        .data,
+        []
+    )
 
-def get_product_by_id(pid):
-    data = safe_execute(lambda: supabase.table("products").select("*").eq("id", pid).execute().data, [])
+def get_product_by_id(product_id: int):
+    """Получить товар по ID"""
+    data = safe_execute(
+        lambda: supabase.table("products")
+        .select("*")
+        .eq("id", product_id)
+        .execute()
+        .data,
+        []
+    )
     return data[0] if data else None
 
-def save_product(data):
-    safe_execute(lambda: supabase.table("products").insert({
-        "name": data["name"],
-        "category": data["category"],
-        "price": data["price"],
-        "photo_url": data["photo_url"],
-        "sizes": data["sizes"]
-    }).execute())
+def save_product(name: str, category: str, price: int, photo_file_id: str, sizes: str = ""):
+    """
+    Сохраняет товар.
+    Фото хранится как file_id из Telegram → безопасно, без внешних сервисов.
+    """
+    safe_execute(
+        lambda: supabase.table("products")
+        .insert({
+            "name": name,
+            "category": category,
+            "price": price,
+            "photo_file_id": photo_file_id,  # ← именно file_id, не URL
+            "sizes": sizes
+        })
+        .execute()
+    )
 
-def delete_product(pid):
-    safe_execute(lambda: supabase.table("products").delete().eq("id", pid).execute())
+def update_product(product_id: int, name: str, category: str, price: int, photo_file_id: str, sizes: str = ""):
+    """Обновить товар"""
+    safe_execute(
+        lambda: supabase.table("products")
+        .update({
+            "name": name,
+            "category": category,
+            "price": price,
+            "photo_file_id": photo_file_id,
+            "sizes": sizes
+        })
+        .eq("id", product_id)
+        .execute()
+    )
 
-# Заказы
-def save_order(uid, uname, pid, size):
-    safe_execute(lambda: supabase.table("orders").insert({
-        "user_id": uid,
-        "username": uname,
-        "product_id": pid,
-        "size": size
-    }).execute())
+def delete_product(product_id: int):
+    """Удалить товар по ID"""
+    safe_execute(
+        lambda: supabase.table("products")
+        .delete()
+        .eq("id", product_id)
+        .execute()
+    )
+
+# ========================
+# ЗАКАЗЫ — НЕ ХРАНЯТСЯ!
+# ========================
+# В этой версии заказы НЕ сохраняются в базу.
+# Все сообщения пересылаются владельцу напрямую.
+# Поэтому функции ниже ЗАКОММЕНЧЕНЫ.
+# Раскомментируй ТОЛЬКО если позже захочешь добавить заказы БЕЗ ПДн (например, только product_id + размер)
+
+"""
+def save_order(product_id: int, size: str, raw_message: str):
+    '''
+    Пример безопасного хранения заказа БЕЗ ПДн:
+    - Нет tg_id, нет username
+    - Только анонимный заказ
+    '''
+    safe_execute(
+        lambda: supabase.table("orders")
+        .insert({
+            "product_id": product_id,
+            "size": size,
+            "raw_message": raw_message  # например: "5 L"
+        })
+        .execute()
+    )
 
 def get_all_orders():
-    return safe_execute(lambda: supabase.table("orders").select("*").order("created_at", desc=True).execute().data, [])
+    return safe_execute(
+        lambda: supabase.table("orders")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+        .data,
+        []
+    )
 
-def get_order_by_id(oid):
-    data = safe_execute(lambda: supabase.table("orders").select("*").eq("id", oid).execute().data, [])
-    return data[0] if data else None
-
-def delete_order(oid):
-    safe_execute(lambda: supabase.table("orders").delete().eq("id", oid).execute())
+def delete_order(order_id: int):
+    safe_execute(
+        lambda: supabase.table("orders")
+        .delete()
+        .eq("id", order_id)
+        .execute()
+    )
+"""
