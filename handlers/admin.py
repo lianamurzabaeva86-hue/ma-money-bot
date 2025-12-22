@@ -20,15 +20,6 @@ class AddProduct(StatesGroup):
 class DeleteProduct(StatesGroup):
     id = State()
 
-# === ЗАКАЗЫ и ПОЛЬЗОВАТЕЛИ — ОПЦИОНАЛЬНО (закомментировано по умолчанию) ===
-# Раскомментируй ТОЛЬКО если используешь анонимные заказы или рассылку
-
-# class DeleteOrder(StatesGroup):
-#     id = State()
-
-# class Broadcast(StatesGroup):
-#     text = State()
-
 @router.message(F.text == "👑 Админка")
 async def admin_panel(message: Message, state: FSMContext):
     await state.clear()
@@ -71,12 +62,16 @@ async def add_product_category(message: Message, state: FSMContext):
     await message.answer("Отправьте фото товара:")
 
 @router.message(AddProduct.photo, F.photo)
-async def add_product_photo(message: Message, state: FSMContext):
-    # Сохраняем ТОЛЬКО file_id из Telegram — безопасно!
-    photo_file_id = message.photo[-1].file_id
-    await state.update_data(photo_file_id=photo_file_id)
-    await state.set_state(AddProduct.sizes)
-    await message.answer("Введите размеры через запятую (например: 36, 38, 40) или '-' если нет:")
+async def add_product_photo(message: Message, state: FSMContext, bot: Bot):
+    try:
+        from utils.db import upload_to_imgbb
+        photo_url = await upload_to_imgbb(bot, message.photo[-1].file_id)
+        await state.update_data(photo_url=photo_url)
+        await state.set_state(AddProduct.sizes)
+        await message.answer("Введите размеры через запятую (например: 36, 38, 40) или '-' если нет:")
+    except Exception as e:
+        logging.error(f"Ошибка загрузки фото: {e}")
+        await message.answer("❌ Не удалось загрузить фото. Повторите попытку.")
 
 @router.message(AddProduct.photo)
 async def photo_invalid(message: Message):
@@ -85,22 +80,16 @@ async def photo_invalid(message: Message):
 @router.message(AddProduct.sizes)
 async def add_product_sizes(message: Message, state: FSMContext):
     sizes = message.text.strip()
-    if sizes == "-":
-        sizes = ""
-    else:
-        sizes = message.text  # Сохраняем как строку
-
     data = await state.get_data()
     data["sizes"] = sizes
 
     try:
         from utils.db import save_product
-        # Передаём photo_file_id вместо photo_url
         save_product(
             name=data["name"],
             category=data["category"],
             price=data["price"],
-            photo_file_id=data["photo_file_id"],
+            photo_url=data["photo_url"],
             sizes=data["sizes"]
         )
         await message.answer("✅ Товар успешно добавлен!")
@@ -130,94 +119,3 @@ async def delete_product_confirm(message: Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Неверный ID. Введите число.")
     await state.clear()
-
-# === ОПЦИОНАЛЬНЫЕ ФУНКЦИИ (закомментированы для безопасности) ===
-
-# @router.message(F.text == "📋 Заказы")
-# async def show_orders(message: Message, state: FSMContext):
-#     await state.clear()
-#     if not is_owner(message):
-#         return
-#     try:
-#         from utils.db import get_all_orders
-#         orders = get_all_orders()
-#         if not orders:
-#             await message.answer("Нет заказов.")
-#             return
-#         text = "📋 Последние заказы:\n\n"
-#         for o in orders[:20]:
-#             order_id = o.get('id', '—')
-#             size = o.get('size', '—')
-#             # НЕТ username, НЕТ tg_id — только анонимные данные
-#             text += f"📦 ID: {order_id} | Размер: {size}\n"
-#         text += "\nЧтобы удалить, нажмите «🗑 Удалить заказ» и введите ID."
-#         await message.answer(text)
-#     except Exception as e:
-#         logging.error(f"Ошибка загрузки заказов: {e}")
-#         await message.answer("❌ Ошибка при получении заказов.")
-
-# @router.message(F.text == "🗑 Удалить заказ")
-# async def delete_order_start(message: Message, state: FSMContext):
-#     if not is_owner(message):
-#         return
-#     await state.set_state(DeleteOrder.id)
-#     await message.answer("Введите ID заказа для удаления:")
-
-# @router.message(DeleteOrder.id)
-# async def delete_order_confirm(message: Message, state: FSMContext):
-#     try:
-#         order_id = int(message.text)
-#         from utils.db import delete_order, get_order_by_id
-#         if not get_order_by_id(order_id):
-#             await message.answer("❌ Заказ не найден.")
-#             return
-#         delete_order(order_id)
-#         await message.answer("✅ Заказ удалён!")
-#     except ValueError:
-#         await message.answer("❌ Неверный ID. Введите число.")
-#     await state.clear()
-
-# @router.message(F.text == "👥 Пользователи")
-# async def show_users(message: Message, state: FSMContext):
-#     await state.clear()
-#     if not is_owner(message):
-#         return
-#     try:
-#         from utils.db import get_all_broadcast_users
-#         users = get_all_broadcast_users()
-#         if not users:
-#             await message.answer("Нет пользователей для рассылки.")
-#             return
-#         text = "👥 Пользователи (только для ручной рассылки):\n\n"
-#         for u in users[:20]:
-#             text += f"ID: {u['tg_id']} | @{u['username'] or '—'}\n"
-#         await message.answer(text)
-#     except Exception as e:
-#         logging.error(f"Пользователи: {e}")
-#         await message.answer("❌ Ошибка загрузки пользователей.")
-
-# @router.message(F.text == "📢 Рассылка")
-# async def broadcast_start(message: Message, state: FSMContext):
-#     if not is_owner(message):
-#         return
-#     await state.set_state(Broadcast.text)
-#     await message.answer("Введите текст рассылки:")
-
-# @router.message(Broadcast.text)
-# async def broadcast_send(message: Message, state: FSMContext, bot: Bot):
-#     text = message.text
-#     try:
-#         from utils.db import get_all_broadcast_users
-#         users = get_all_broadcast_users()
-#         success = 0
-#         for u in users:
-#             try:
-#                 await bot.send_message(u["tg_id"], text)
-#                 success += 1
-#             except:
-#                 pass
-#         await message.answer(f"✅ Рассылка отправлена {success} пользователям.")
-#     except Exception as e:
-#         logging.error(f"Рассылка: {e}")
-#         await message.answer("❌ Ошибка рассылки.")
-#     await state.clear()
