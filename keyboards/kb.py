@@ -2,22 +2,14 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 OWNER_ID = 6782041245
 
-def main_menu():
-    """
-    Главное меню — кнопка 'Админка' видна всем, 
-    но доступ к ней ограничен на уровне handlers (is_owner).
-    Это безопасно и не требует передачи user_id.
-    """
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📦 Каталог")],
-            [KeyboardButton(text="👑 Админка")]  # Доступ проверяется в admin.py
-        ],
-        resize_keyboard=True
-    )
+def main_menu(user_id: int):
+    """Показывает админку только владельцу"""
+    keyboard = [[KeyboardButton(text="📦 Каталог")]]
+    if user_id == OWNER_ID:
+        keyboard.append([KeyboardButton(text="👑 Админка")])
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 def categories_kb(categories):
-    """Клавиатура с категориями (до 2 в строке)"""
     if not categories:
         return ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="⬅️ Назад")]],
@@ -33,27 +25,16 @@ def categories_kb(categories):
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 def product_kb():
-    """Кнопка назад после показа товаров"""
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="⬅️ Назад к категориям")]],
         resize_keyboard=True
     )
 
 def admin_menu():
-    """
-    Админ-меню.
-    Опционально: если не используешь заказы/пользователей/рассылку — 
-    можно убрать соответствующие кнопки.
-    """
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="➕ Добавить товар")],
             [KeyboardButton(text="🗑 Удалить товар")],
-            # === Опциональные пункты (раскомментируй при необходимости) ===
-            # [KeyboardButton(text="📋 Заказы")],
-            # [KeyboardButton(text="🗑 Удалить заказ")],
-            # [KeyboardButton(text="👥 Пользователи")],
-            # [KeyboardButton(text="📢 Рассылка")],
             [KeyboardButton(text="⬅️ В меню")]
         ],
         resize_keyboard=True
