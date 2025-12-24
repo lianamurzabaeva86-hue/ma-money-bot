@@ -81,7 +81,14 @@ async def photo_invalid(message: Message):
 async def add_product_sizes(message: Message, state: FSMContext):
     sizes = message.text.strip()
     data = await state.get_data()
-    data["sizes"] = sizes
+
+    # Проверка обязательных полей
+    required = ["name", "price", "category", "photo_url"]
+    for key in required:
+        if key not in 
+            await message.answer("❌ Ошибка: не все данные собраны. Начните заново.")
+            logging.error(f"Недостающее поле при сохранении: {key}")
+            return
 
     try:
         from utils.db import save_product
@@ -90,7 +97,7 @@ async def add_product_sizes(message: Message, state: FSMContext):
             category=data["category"],
             price=data["price"],
             photo_url=data["photo_url"],
-            sizes=data["sizes"]
+            sizes=sizes
         )
         await message.answer("✅ Товар успешно добавлен!")
     except Exception as e:
@@ -119,3 +126,9 @@ async def delete_product_confirm(message: Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Неверный ID. Введите число.")
     await state.clear()
+
+@router.message(F.text == "⬅️ В меню")
+async def back_to_main_menu(message: Message, state: FSMContext):
+    await state.clear()
+    from keyboards.kb import main_menu
+    await message.answer("Главное меню:", reply_markup=main_menu(message.from_user.id))
