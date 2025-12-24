@@ -6,7 +6,6 @@ import httpx
 
 logging.basicConfig(level=logging.INFO)
 
-# Подключение к Supabase
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def safe_execute(func, default=None):
@@ -50,71 +49,40 @@ async def upload_to_imgbb(bot, file_id: str) -> str:
         logging.error(f"Ошибка загрузки в ImgBB: {e}")
         return f"tg://{file_id}"
 
-
-# === РАБОТА С ТОВАРАМИ ===
-
+# === ТОВАРЫ ===
 def get_categories():
     data = safe_execute(
-        lambda: supabase.table("products")
-        .select("category")
-        .execute()
-        .data,
+        lambda: supabase.table("products").select("category").execute().data,
         []
     )
     return sorted(set(item["category"] for item in data)) if data else []
 
 def get_products_by_category(category: str):
     return safe_execute(
-        lambda: supabase.table("products")
-        .select("*")
-        .eq("category", category)
-        .execute()
-        .data,
+        lambda: supabase.table("products").select("*").eq("category", category).execute().data,
         []
     )
 
 def get_product_by_id(product_id: int):
     data = safe_execute(
-        lambda: supabase.table("products")
-        .select("*")
-        .eq("id", product_id)
-        .execute()
-        .data,
+        lambda: supabase.table("products").select("*").eq("id", product_id).execute().data,
         []
     )
     return data[0] if data else None
 
 def save_product(name: str, category: str, price: int, photo_url: str, sizes: str = ""):
+    logging.info(f"Сохраняю товар: {name} | Категория: {category} | Фото: {photo_url}")
     safe_execute(
-        lambda: supabase.table("products")
-        .insert({
-            "name": name,
-            "category": category,
-            "price": price,
-            "photo_url": photo_url,      # Сохраняем URL с ImgBB
-            "sizes": sizes
-        })
-        .execute()
-    )
-
-def update_product(product_id: int, name: str, category: str, price: int, photo_url: str, sizes: str = ""):
-    safe_execute(
-        lambda: supabase.table("products")
-        .update({
+        lambda: supabase.table("products").insert({
             "name": name,
             "category": category,
             "price": price,
             "photo_url": photo_url,
             "sizes": sizes
-        })
-        .eq("id", product_id)
-        .execute()
+        }).execute()
     )
 
 def delete_product(product_id: int):
     safe_execute(
-        lambda: supabase.table("products")
-        .delete()
-        .eq("id", product_id)
-        .execute()
+        lambda: supabase.table("products").delete().eq("id", product_id).execute()
     )
