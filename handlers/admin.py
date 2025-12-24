@@ -85,7 +85,7 @@ async def add_product_sizes(message: Message, state: FSMContext):
     # Проверка обязательных полей
     required = ["name", "price", "category", "photo_url"]
     for key in required:
-        if key not in 
+        if key not in data:
             await message.answer("❌ Ошибка: не все данные собраны. Начните заново.")
             logging.error(f"Недостающее поле при сохранении: {key}")
             return
@@ -132,3 +132,4 @@ async def back_to_main_menu(message: Message, state: FSMContext):
     await state.clear()
     from keyboards.kb import main_menu
     await message.answer("Главное меню:", reply_markup=main_menu(message.from_user.id))
+
