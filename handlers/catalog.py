@@ -5,7 +5,7 @@ from aiogram.exceptions import TelegramAPIError
 import logging
 
 router = Router()
-OWNER_USERNAME = "ma_money_owner"  # ← замени на свой!
+OWNER_USERNAME = "ma_money_owner"  # ← замени на свой
 
 @router.message(F.text == "📦 Каталог")
 async def show_categories(message: Message, state: FSMContext):
@@ -40,17 +40,14 @@ async def show_products_by_category(message: Message, state: FSMContext):
             
             photo_url = p.get("photo_url")
             if photo_url and photo_url.startswith("http"):
-                # Загружаем фото с ImgBB
                 try:
                     await message.answer_photo(photo=photo_url, caption=caption)
                 except TelegramAPIError:
                     await message.answer(f"{caption}\n📷 [Фото недоступно]")
             else:
-                # Резерв: если photo_url пустой или tg:// — пробуем file_id
-                # (для обратной совместимости)
                 photo_id = p.get("photo_file_id") or photo_url
-                if photo_id and isinstance(photo_id, str):
-                    if photo_id.startswith("tg://"):
+                if photo_id:
+                    if isinstance(photo_id, str) and photo_id.startswith("tg://"):
                         photo_id = photo_id.replace("tg://", "")
                     try:
                         await message.answer_photo(photo=photo_id, caption=caption)
